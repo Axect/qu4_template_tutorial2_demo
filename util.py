@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import TensorDataset
+from torch.utils.data import TensorDataset, random_split
 import torch.nn.functional as F
 import numpy as np
 import beaupy
@@ -16,25 +16,60 @@ from math import pi
 
 
 def load_data(n=10000, split_ratio=0.8, seed=42):
-    # Fix Seed
+    """
+    Generates a dataset for approximating a complex function with 2D input (x1, x2)
+    and 1D output (y). Splits the data into training and validation sets
+    using torch.utils.data.random_split.
+
+    Args:
+        n (int): Total number of data points to generate.
+        split_ratio (float): Ratio of the dataset to use for training.
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        tuple: (train_ds, val_ds) - Tuple containing training and validation Subset objects.
+    """
+    # Set random seeds for reproducibility
     torch.manual_seed(seed)
+    generator = torch.Generator().manual_seed(seed) # Generator for reproducible random_split
 
-    x = torch.linspace(0, 1, n) + torch.rand(n) * 0.01
-    y = torch.cos(x * (2 * pi)) + torch.rand(n) * 0.01
+    # Generate n random 2D points in the [0, 1] x [0, 1] range
+    x = torch.rand(n, 2) # Shape: (n, 2)
 
-    ics = torch.randperm(n)
-    ics_train = ics[: int(n * split_ratio)]
-    ics_val = ics[int(n * split_ratio) :]
+    # Separate input variables for clarity in calculation
+    x1 = x[:, 0]
+    x2 = x[:, 1]
 
-    x_train = x[ics_train].view(-1, 1)
-    y_train = y[ics_train].view(-1, 1)
-    x_val = x[ics_val].view(-1, 1)
-    y_val = y[ics_val].view(-1, 1)
+    # Define the complex 2D function and generate y
+    # y = sin(4*pi*x1) + 0.8*sin(6*pi*x2) + 1.5*tanh(3*x1*x2) + (x1^2 + x2^2) + noise
+    pi = math.pi
+    noise_level = 0.05
 
-    train_ds = TensorDataset(x_train, y_train)
-    val_ds = TensorDataset(x_val, y_val)
+    # Calculate y based on the function
+    y = (
+        1.0 * torch.sin(4 * pi * x1)      # Periodic term for x1
+        + 0.8 * torch.sin(6 * pi * x2)    # Periodic term for x2 (diff. freq/amp)
+        + 1.5 * torch.tanh(3 * x1 * x2)   # Interaction term (using tanh)
+        + 1.0 * (x1**2 + x2**2)           # Quadratic base shape
+        + torch.randn(n) * noise_level    # Add Gaussian noise
+    )
 
-    return train_ds, val_ds
+    # Reshape y to (N, 1) for standard model output
+    y = y.view(-1, 1) # Shape: (n, 1)
+
+    # Create a TensorDataset containing the full dataset (inputs and outputs)
+    full_dataset = TensorDataset(x, y) # Input shape: (n, 2), Output shape: (n, 1)
+
+    # Calculate the number of samples for training and validation sets
+    train_size = int(n * split_ratio)
+    val_size = n - train_size
+
+    # Perform random split using the generator for reproducibility
+    train_dataset, val_dataset = random_split(
+        full_dataset, [train_size, val_size], generator=generator
+    )
+
+    return train_dataset, val_dataset
 
 
 def set_seed(seed: int):

@@ -9,7 +9,7 @@ class MLP(nn.Module):
 
         nodes = hparams["nodes"]
         layers = hparams["layers"]
-        input_size = 1
+        input_size = 2
         output_size = 1
 
         net = [nn.Linear(input_size, nodes), nn.GELU()]
